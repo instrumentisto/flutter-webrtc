@@ -53,10 +53,14 @@ impl Webrtc {
                     .create_audio_track(src)
                     .map_err(|err| api::GetMediaError::Audio(err.to_string()));
                 if let Err(err) = track {
-                    if Arc::get_mut(self.audio_source.as_mut().unwrap())
+                    if Arc::get_mut(self.audio_source.0.as_mut().unwrap())
                         .is_some()
                     {
-                        self.audio_source.take();
+                        for source in self.audio_source.1.values() {
+                            self.audio_device_module.remove_source(source);
+                        }
+                        self.audio_source.1.clear();
+                        self.audio_source.0.take();
                     }
                     return Err(err);
                 }
@@ -86,7 +90,11 @@ impl Webrtc {
                 {
                     if let MediaTrackSource::Local(src) = track.source {
                         if Arc::strong_count(&src) == 2 {
-                            self.audio_source.take();
+                            for source in self.audio_source.1.values() {
+                                self.audio_device_module.remove_source(source);
+                            }
+                            self.audio_source.1.clear();
+                            self.audio_source.0.take();
                             // TODO: We should make `AudioDeviceModule` to stop
                             //       recording.
                         };
@@ -294,16 +302,64 @@ impl Webrtc {
         if Some(&device_id)
             != self.audio_device_module.current_device_id.as_ref()
         {
+            if let Some(source) = self
+                .audio_device_module
+                .current_device_id
+                .as_ref()
+                .map(|id| self.audio_source.1.remove(id))
+                .flatten()
+            {
+                self.audio_device_module.remove_source(&source);
+            }
+
             self.audio_device_module
-                .set_recording_device(device_id, device_index)?;
+                .set_recording_device(device_id.clone(), device_index)?;
         }
 
-        let src = if let Some(src) = self.audio_source.as_ref() {
+        let microphone_audio =
+            self.audio_device_module.create_source_microphone();
+        self.audio_device_module.add_source(&microphone_audio);
+        self.audio_source.1.insert(device_id, microphone_audio);
+
+        if let Some(id) = caps.system_id {
+            let system_id = AudioDeviceId(id.to_string());
+            if Some(&system_id)
+                != self.audio_device_module.current_system_id.as_ref()
+            {
+                self.audio_device_module.set_system_audio_source(id);
+
+                if let Some(current_system_id) =
+                    self.audio_device_module.current_system_id.take()
+                {
+                    if let Some(source) =
+                        self.audio_source.1.remove(&current_system_id)
+                    {
+                        self.audio_device_module.remove_source(&source);
+                    }
+                }
+
+                self.audio_device_module.current_system_id =
+                    Some(system_id.clone());
+                let system_audio =
+                    self.audio_device_module.create_system_audio_source();
+
+                self.audio_device_module.add_source(&system_audio);
+                self.audio_source.1.insert(system_id, system_audio);
+            }
+        } else if let Some(system_id) =
+            self.audio_device_module.current_system_id.take()
+        {
+            if let Some(source) = self.audio_source.1.remove(&system_id) {
+                self.audio_device_module.remove_source(&source);
+            }
+        }
+
+        let src = if let Some(src) = self.audio_source.0.as_ref() {
             Arc::clone(src)
         } else {
             let src =
                 Arc::new(self.peer_connection_factory.create_audio_source()?);
-            self.audio_source.replace(Arc::clone(&src));
+            self.audio_source.0.replace(Arc::clone(&src));
 
             src
         };
@@ -609,6 +665,10 @@ pub struct AudioDeviceModule {
     /// [`None`] if the [`AudioDeviceModule`] was not used yet to record data
     /// from the audio input device.
     current_device_id: Option<AudioDeviceId>,
+
+    /// ID of the system audio source currently used by this
+    /// [`sys::AudioDeviceModule`].
+    current_system_id: Option<AudioDeviceId>,
 }
 
 impl AudioDeviceModule {
@@ -633,6 +693,7 @@ impl AudioDeviceModule {
         let mut adm = Self {
             inner,
             current_device_id: None,
+            current_system_id: None,
         };
         if adm.recording_devices() > 0 {
             adm.set_recording_device(
@@ -656,7 +717,47 @@ impl AudioDeviceModule {
         Self {
             inner,
             current_device_id: None,
+            current_system_id: None,
         }
+    }
+
+    /// Sets the system audio source.
+    pub fn set_system_audio_source(&mut self, id: i64) {
+        self.inner.set_system_audio_source(id);
+    }
+
+    /// Enumerates possible system audio sources.
+    pub fn enumerate_system_audio_source(
+        &mut self,
+    ) -> Vec<api::AudioSourceInfo> {
+        self.inner
+            .enumerate_system_audio_source()
+            .into_iter()
+            .map(|info| api::AudioSourceInfo {
+                id: info.id(),
+                title: info.title(),
+            })
+            .collect()
+    }
+
+    /// Creates a new [`sys::AudioSource`] from microphone.
+    pub fn create_source_microphone(&mut self) -> sys::AudioSource {
+        self.inner.create_source_microphone()
+    }
+
+    /// Creates a new [`sys::AudioSource`] from microphone.
+    pub fn create_system_audio_source(&mut self) -> sys::AudioSource {
+        self.inner.create_system_audio_source()
+    }
+
+    /// Adds [`sys::AudioSource`] to [`AudioDeviceModule`].
+    pub fn add_source(&mut self, source: &sys::AudioSource) {
+        self.inner.add_source(source);
+    }
+
+    /// Removes [`sys::AudioSource`] to [`AudioDeviceModule`].
+    pub fn remove_source(&mut self, source: &sys::AudioSource) {
+        self.inner.remove_source(source);
     }
 
     /// Returns the `(label, id)` tuple for the given audio playout device
@@ -789,6 +890,17 @@ impl AudioDeviceModule {
 
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         self.inner.set_microphone_volume(volume as u32)
+    }
+
+    /// Sets the volume of the system audio capture.
+    pub fn set_system_audio_source_volume(&mut self, level: f32) {
+        self.inner.set_system_audio_source_volume(level);
+    }
+
+    /// Returns the current volume of the system audio capture.
+    #[must_use]
+    pub fn system_audio_source_volume(&self) -> f32 {
+        self.inner.system_audio_source_volume()
     }
 
     /// Indicates if the microphone is available to set volume.

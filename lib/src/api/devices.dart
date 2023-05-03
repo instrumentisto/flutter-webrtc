@@ -137,6 +137,33 @@ Future<List<MediaDisplayInfo>> enumerateDisplays() async {
   }
 }
 
+/// Returns list of [AudioSourceInfo]s for the currently available system audio source.
+Future<List<AudioSourceInfo>> enumerateSystemAudioSource() async {
+  if (isDesktop) {
+    return await api!.enumerateSystemAudioSource();
+  } else {
+    return List<AudioSourceInfo>.empty();
+  }
+}
+
+/// Returns the current volume of the system audio capture.
+Future<double> systemAudioVolume() async {
+  if (isDesktop) {
+    return await api!.systemAudioVolume();
+  } else {
+    throw 'Not supported';
+  }
+}
+
+/// Sets the system audio capture volume according to the specified [volume].
+Future<void> setSystemAudioVolume(double volume) async {
+  if (isDesktop) {
+    return await api!.setSystemAudioVolume(level: volume);
+  } else {
+    throw 'Not supported';
+  }
+}
+
 /// Returns list of local audio and video [NativeMediaStreamTrack]s based on the
 /// provided [DeviceConstraints].
 Future<List<NativeMediaStreamTrack>> getUserMedia(
@@ -213,10 +240,12 @@ Future<List<NativeMediaStreamTrack>> _getUserMediaChannel(
 /// FFI-based implementation of a [getUserMedia] function.
 Future<List<NativeMediaStreamTrack>> _getUserMediaFFI(
     DeviceConstraints constraints) async {
-  var audioConstraints = constraints.audio.mandatory != null ||
-          constraints.audio.optional != null
-      ? ffi.AudioConstraints(deviceId: constraints.audio.mandatory?.deviceId)
-      : null;
+  var audioConstraints =
+      constraints.audio.mandatory != null || constraints.audio.optional != null
+          ? ffi.AudioConstraints(
+              deviceId: constraints.audio.mandatory?.deviceId,
+              systemId: constraints.audio.mandatory?.systemId)
+          : null;
 
   var videoConstraints =
       constraints.video.mandatory != null || constraints.video.optional != null

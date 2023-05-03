@@ -1,7 +1,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-
 #include <chrono>
 #include <thread>
 
@@ -13,7 +12,7 @@
 #include "libwebrtc-sys/src/bridge.rs.h"
 
 namespace bridge {
-
+ 
 // Creates a new `TrackEventObserver`.
 TrackEventObserver::TrackEventObserver(
     rust::Box<bridge::DynTrackEventCallback> cb)
@@ -125,6 +124,59 @@ std::unique_ptr<AudioDeviceModule> create_audio_device_module(
       webrtc::AudioDeviceModuleProxy::Create(&worker_thread, adm);
 
   return std::make_unique<AudioDeviceModule>(proxied);
+}
+
+// Creates a new `AudioSourceManager` for the given `CustomAudioDeviceModule`.
+std::unique_ptr<AudioSourceManager> create_source_manager(const CustomAudioDeviceModule& adm, Thread& worker_thread) {
+    auto a = AudioSourceManagerProxy::Create(&worker_thread, adm);
+    return a;
+}
+
+// Creates a new proxied `AudioDeviceModule` from the provided `CustomAudioDeviceModule`.
+std::unique_ptr<AudioDeviceModule> custom_audio_device_module_proxy_upcast(std::unique_ptr<CustomAudioDeviceModule> adm, Thread& worker_thread) {
+
+    AudioDeviceModule admm = *adm.get();
+    AudioDeviceModule proxied =
+      webrtc::AudioDeviceModuleProxy::Create(&worker_thread, admm);
+
+  return std::make_unique<AudioDeviceModule>(proxied);
+}
+
+// Creates a new `AudioSource` from microphone.
+std::unique_ptr<AudioSource> create_source_microphone(AudioSourceManager& manager) {
+  return std::make_unique<AudioSource>(manager.CreateMicrophoneSource());
+}
+
+// Creates a new `AudioSource` from system.
+std::unique_ptr<AudioSource> create_system_audio_source(AudioSourceManager& manager) {
+  return std::make_unique<AudioSource>(manager.CreateSystemSource());
+}
+
+// Adds `AudioSource` to `AudioSourceManager`.
+void add_source(AudioSourceManager& manager, const AudioSource& source) {
+  manager.AddSource(source);
+}
+
+// Removes `AudioSource` from `AudioSourceManager`.
+void remove_source(AudioSourceManager& manager, const AudioSource& source) {
+  manager.RemoveSource(source);
+}
+
+// Creates a new `CustomAudioDeviceModule`.
+std::unique_ptr<CustomAudioDeviceModule> create_custom_audio_device_module(
+  Thread& worker_thread,
+    AudioLayer audio_layer,
+    TaskQueueFactory& task_queue_factory) {
+  CustomAudioDeviceModule adm = worker_thread.Invoke<CustomAudioDeviceModule>(
+      RTC_FROM_HERE, [audio_layer, &task_queue_factory] {
+        return ::CustomAudioDeviceModule::Create(audio_layer, &task_queue_factory);
+      });
+
+  if (adm == nullptr) {
+    return nullptr;
+  }
+
+  return std::make_unique<CustomAudioDeviceModule>(adm);
 }
 
 // Calls `AudioDeviceModule->Init()`.
@@ -329,9 +381,8 @@ std::unique_ptr<VideoTrackSourceInterface> create_display_video_source(
 // `AudioOptions`.
 std::unique_ptr<AudioSourceInterface> create_audio_source(
     const PeerConnectionFactoryInterface& peer_connection_factory) {
-  auto src =
-      peer_connection_factory->CreateAudioSource(cricket::AudioOptions());
-
+  
+  auto src =  peer_connection_factory->CreateAudioSource(cricket::AudioOptions());
   if (src == nullptr) {
     return nullptr;
   }
@@ -482,6 +533,7 @@ std::unique_ptr<PeerConnectionFactoryInterface> create_peer_connection_factory(
     const std::unique_ptr<Thread>& signaling_thread,
     const std::unique_ptr<AudioDeviceModule>& default_adm,
     const std::unique_ptr<AudioProcessing>& ap) {
+
   auto factory = webrtc::CreatePeerConnectionFactory(
       network_thread.get(), worker_thread.get(), signaling_thread.get(),
       default_adm ? *default_adm : nullptr,
@@ -891,5 +943,36 @@ int64_t display_source_id(const DisplaySource& source) {
 std::unique_ptr<std::string> display_source_title(const DisplaySource& source) {
   return std::make_unique<std::string>(source.title);
 }
+
+// Enumerates possible system audio sources.
+std::unique_ptr<std::vector<AudioSourceInfo>> enumerate_system_audio_source(const AudioSourceManager& manager) {
+  return std::make_unique<std::vector<AudioSourceInfo>>(manager.EnumerateSystemSource());
+}
+
+// Sets the system audio source.
+void set_system_audio_source(AudioSourceManager& manager, int64_t id) {
+  manager.SetRecordingSource(id);
+}
+
+// Returns `AudioSourceInfo` id.
+int64_t system_source_id(const AudioSourceInfo& source) {
+  return source.GetId();
+}
+
+// Returns `AudioSourceInfo` title.
+std::unique_ptr<std::string> system_source_title(const AudioSourceInfo& source) {
+  return std::make_unique<std::string>(source.GetTitle());
+}
+
+// Sets the volume of the system audio capture.
+void set_system_audio_source_volume(AudioSourceManager& manager, float level) {
+  manager.SetSystemAudioVolume(level);
+}
+
+// Returns the current volume of the system audio capture.
+float system_audio_source_volume(const AudioSourceManager& manager) {
+  return manager.GetSystemAudioVolume();
+}
+
 
 }  // namespace bridge

@@ -30,6 +30,11 @@ abstract class FlutterWebrtcNative {
 
   FlutterRustBridgeTaskConstMeta get kEnumerateDevicesConstMeta;
 
+  /// Enumerates possible system audio sources.
+  Future<List<AudioSourceInfo>> enumerateSystemAudioSource({dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kEnumerateSystemAudioSourceConstMeta;
+
   /// Returns a list of all available displays that can be used for screen
   /// capturing.
   Future<List<MediaDisplayInfo>> enumerateDisplays({dynamic hint});
@@ -250,6 +255,16 @@ abstract class FlutterWebrtcNative {
 
   FlutterRustBridgeTaskConstMeta get kCloneTrackConstMeta;
 
+  /// Sets the volume of the system audio capture.
+  Future<void> setSystemAudioVolume({required double level, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSetSystemAudioVolumeConstMeta;
+
+  /// Returns the current volume of the system audio capture.
+  Future<double> systemAudioVolume({dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSystemAudioVolumeConstMeta;
+
   /// Registers an observer to the [`MediaStreamTrack`] events.
   Stream<TrackEvent> registerTrackObserver(
       {required String trackId, required MediaType kind, dynamic hint});
@@ -296,8 +311,27 @@ class AudioConstraints {
   ///           tracks.
   final String? deviceId;
 
+  /// Identifier of the system audio source generating the content of the
+  /// [`MediaStreamTrack`].
+  final int? systemId;
+
   AudioConstraints({
     this.deviceId,
+    this.systemId,
+  });
+}
+
+/// Information about system audio source.
+class AudioSourceInfo {
+  /// Unique id of system audio source.
+  final int id;
+
+  /// Title of system audio source.
+  final String title;
+
+  AudioSourceInfo({
+    required this.id,
+    required this.title,
   });
 }
 
@@ -1779,6 +1813,23 @@ class FlutterWebrtcNativeImpl implements FlutterWebrtcNative {
         argNames: [],
       );
 
+  Future<List<AudioSourceInfo>> enumerateSystemAudioSource({dynamic hint}) {
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_enumerate_system_audio_source(port_),
+      parseSuccessData: _wire2api_list_audio_source_info,
+      constMeta: kEnumerateSystemAudioSourceConstMeta,
+      argValues: [],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kEnumerateSystemAudioSourceConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "enumerate_system_audio_source",
+        argNames: [],
+      );
+
   Future<List<MediaDisplayInfo>> enumerateDisplays({dynamic hint}) {
     return _platform.executeNormal(FlutterRustBridgeTask(
       callFfi: (port_) => _platform.inner.wire_enumerate_displays(port_),
@@ -2369,6 +2420,40 @@ class FlutterWebrtcNativeImpl implements FlutterWebrtcNative {
         argNames: ["trackId", "kind"],
       );
 
+  Future<void> setSystemAudioVolume({required double level, dynamic hint}) {
+    var arg0 = api2wire_f32(level);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_set_system_audio_volume(port_, arg0),
+      parseSuccessData: _wire2api_unit,
+      constMeta: kSetSystemAudioVolumeConstMeta,
+      argValues: [level],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSetSystemAudioVolumeConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "set_system_audio_volume",
+        argNames: ["level"],
+      );
+
+  Future<double> systemAudioVolume({dynamic hint}) {
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner.wire_system_audio_volume(port_),
+      parseSuccessData: _wire2api_f32,
+      constMeta: kSystemAudioVolumeConstMeta,
+      argValues: [],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSystemAudioVolumeConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "system_audio_volume",
+        argNames: [],
+      );
+
   Stream<TrackEvent> registerTrackObserver(
       {required String trackId, required MediaType kind, dynamic hint}) {
     var arg0 = _platform.api2wire_String(trackId);
@@ -2455,6 +2540,16 @@ class FlutterWebrtcNativeImpl implements FlutterWebrtcNative {
     return raw as String;
   }
 
+  AudioSourceInfo _wire2api_audio_source_info(dynamic raw) {
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AudioSourceInfo(
+      id: _wire2api_i64(arr[0]),
+      title: _wire2api_String(arr[1]),
+    );
+  }
+
   bool _wire2api_bool(dynamic raw) {
     return raw as bool;
   }
@@ -2522,6 +2617,10 @@ class FlutterWebrtcNativeImpl implements FlutterWebrtcNative {
 
   CandidateType _wire2api_candidate_type(dynamic raw) {
     return CandidateType.values[raw];
+  }
+
+  double _wire2api_f32(dynamic raw) {
+    return raw as double;
   }
 
   double _wire2api_f64(dynamic raw) {
@@ -2592,6 +2691,10 @@ class FlutterWebrtcNativeImpl implements FlutterWebrtcNative {
 
   IceRole _wire2api_ice_role(dynamic raw) {
     return IceRole.values[raw];
+  }
+
+  List<AudioSourceInfo> _wire2api_list_audio_source_info(dynamic raw) {
+    return (raw as List<dynamic>).map(_wire2api_audio_source_info).toList();
   }
 
   List<MediaDeviceInfo> _wire2api_list_media_device_info(dynamic raw) {
@@ -3014,6 +3117,11 @@ int api2wire_bundle_policy(BundlePolicy raw) {
 }
 
 @protected
+double api2wire_f32(double raw) {
+  return raw;
+}
+
+@protected
 int api2wire_i32(int raw) {
   return raw;
 }
@@ -3080,6 +3188,11 @@ class FlutterWebrtcNativePlatform
   }
 
   @protected
+  ffi.Pointer<ffi.Int64> api2wire_box_autoadd_i64(int raw) {
+    return inner.new_box_autoadd_i64_0(api2wire_i64(raw));
+  }
+
+  @protected
   ffi.Pointer<wire_MediaStreamConstraints>
       api2wire_box_autoadd_media_stream_constraints(
           MediaStreamConstraints raw) {
@@ -3133,6 +3246,11 @@ class FlutterWebrtcNativePlatform
   }
 
   @protected
+  ffi.Pointer<ffi.Int64> api2wire_opt_box_autoadd_i64(int? raw) {
+    return raw == null ? ffi.nullptr : api2wire_box_autoadd_i64(raw);
+  }
+
+  @protected
   ffi.Pointer<wire_VideoConstraints> api2wire_opt_box_autoadd_video_constraints(
       VideoConstraints? raw) {
     return raw == null
@@ -3159,6 +3277,7 @@ class FlutterWebrtcNativePlatform
   void _api_fill_to_wire_audio_constraints(
       AudioConstraints apiObj, wire_AudioConstraints wireObj) {
     wireObj.device_id = api2wire_opt_String(apiObj.deviceId);
+    wireObj.system_id = api2wire_opt_box_autoadd_i64(apiObj.systemId);
   }
 
   void _api_fill_to_wire_box_autoadd_audio_constraints(
@@ -3361,6 +3480,20 @@ class FlutterWebrtcNativeWire implements FlutterRustBridgeWireBase {
           'wire_enumerate_devices');
   late final _wire_enumerate_devices =
       _wire_enumerate_devicesPtr.asFunction<void Function(int)>();
+
+  void wire_enumerate_system_audio_source(
+    int port_,
+  ) {
+    return _wire_enumerate_system_audio_source(
+      port_,
+    );
+  }
+
+  late final _wire_enumerate_system_audio_sourcePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+          'wire_enumerate_system_audio_source');
+  late final _wire_enumerate_system_audio_source =
+      _wire_enumerate_system_audio_sourcePtr.asFunction<void Function(int)>();
 
   void wire_enumerate_displays(
     int port_,
@@ -3897,6 +4030,36 @@ class FlutterWebrtcNativeWire implements FlutterRustBridgeWireBase {
   late final _wire_clone_track = _wire_clone_trackPtr
       .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>, int)>();
 
+  void wire_set_system_audio_volume(
+    int port_,
+    double level,
+  ) {
+    return _wire_set_system_audio_volume(
+      port_,
+      level,
+    );
+  }
+
+  late final _wire_set_system_audio_volumePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.Float)>>(
+          'wire_set_system_audio_volume');
+  late final _wire_set_system_audio_volume =
+      _wire_set_system_audio_volumePtr.asFunction<void Function(int, double)>();
+
+  void wire_system_audio_volume(
+    int port_,
+  ) {
+    return _wire_system_audio_volume(
+      port_,
+    );
+  }
+
+  late final _wire_system_audio_volumePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+          'wire_system_audio_volume');
+  late final _wire_system_audio_volume =
+      _wire_system_audio_volumePtr.asFunction<void Function(int)>();
+
   void wire_register_track_observer(
     int port_,
     ffi.Pointer<wire_uint_8_list> track_id,
@@ -3991,6 +4154,20 @@ class FlutterWebrtcNativeWire implements FlutterRustBridgeWireBase {
   late final _new_box_autoadd_audio_constraints_0 =
       _new_box_autoadd_audio_constraints_0Ptr
           .asFunction<ffi.Pointer<wire_AudioConstraints> Function()>();
+
+  ffi.Pointer<ffi.Int64> new_box_autoadd_i64_0(
+    int value,
+  ) {
+    return _new_box_autoadd_i64_0(
+      value,
+    );
+  }
+
+  late final _new_box_autoadd_i64_0Ptr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Int64> Function(ffi.Int64)>>(
+          'new_box_autoadd_i64_0');
+  late final _new_box_autoadd_i64_0 = _new_box_autoadd_i64_0Ptr
+      .asFunction<ffi.Pointer<ffi.Int64> Function(int)>();
 
   ffi.Pointer<wire_MediaStreamConstraints>
       new_box_autoadd_media_stream_constraints_0() {
@@ -4115,6 +4292,8 @@ class wire_RtcConfiguration extends ffi.Struct {
 
 class wire_AudioConstraints extends ffi.Struct {
   external ffi.Pointer<wire_uint_8_list> device_id;
+
+  external ffi.Pointer<ffi.Int64> system_id;
 }
 
 class wire_VideoConstraints extends ffi.Struct {

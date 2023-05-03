@@ -1,3 +1,4 @@
+// swiftformat:disable all
 import Flutter
 
 /// Controller of a `MediaStreamTrack`.

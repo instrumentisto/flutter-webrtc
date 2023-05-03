@@ -17,6 +17,11 @@ pub extern "C" fn wire_enumerate_devices(port_: i64) {
 }
 
 #[no_mangle]
+pub extern "C" fn wire_enumerate_system_audio_source(port_: i64) {
+    wire_enumerate_system_audio_source_impl(port_)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_enumerate_displays(port_: i64) {
     wire_enumerate_displays_impl(port_)
 }
@@ -271,6 +276,16 @@ pub extern "C" fn wire_clone_track(
 }
 
 #[no_mangle]
+pub extern "C" fn wire_set_system_audio_volume(port_: i64, level: f32) {
+    wire_set_system_audio_volume_impl(port_, level)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_system_audio_volume(port_: i64) {
+    wire_system_audio_volume_impl(port_)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_register_track_observer(
     port_: i64,
     track_id: *mut wire_uint_8_list,
@@ -317,6 +332,11 @@ pub extern "C" fn new_StringList_0(len: i32) -> *mut wire_StringList {
 pub extern "C" fn new_box_autoadd_audio_constraints_0(
 ) -> *mut wire_AudioConstraints {
     support::new_leak_box_ptr(wire_AudioConstraints::new_with_null_ptr())
+}
+
+#[no_mangle]
+pub extern "C" fn new_box_autoadd_i64_0(value: i64) -> *mut i64 {
+    support::new_leak_box_ptr(value)
 }
 
 #[no_mangle]
@@ -383,6 +403,7 @@ impl Wire2Api<AudioConstraints> for wire_AudioConstraints {
     fn wire2api(self) -> AudioConstraints {
         AudioConstraints {
             device_id: self.device_id.wire2api(),
+            system_id: self.system_id.wire2api(),
         }
     }
 }
@@ -391,6 +412,11 @@ impl Wire2Api<AudioConstraints> for *mut wire_AudioConstraints {
     fn wire2api(self) -> AudioConstraints {
         let wrap = unsafe { support::box_from_leak_ptr(self) };
         Wire2Api::<AudioConstraints>::wire2api(*wrap).into()
+    }
+}
+impl Wire2Api<i64> for *mut i64 {
+    fn wire2api(self) -> i64 {
+        unsafe { *support::box_from_leak_ptr(self) }
     }
 }
 impl Wire2Api<MediaStreamConstraints> for *mut wire_MediaStreamConstraints {
@@ -481,6 +507,7 @@ pub struct wire_StringList {
 #[derive(Clone)]
 pub struct wire_AudioConstraints {
     device_id: *mut wire_uint_8_list,
+    system_id: *mut i64,
 }
 
 #[repr(C)]
@@ -546,6 +573,7 @@ impl NewWithNullPtr for wire_AudioConstraints {
     fn new_with_null_ptr() -> Self {
         Self {
             device_id: core::ptr::null_mut(),
+            system_id: core::ptr::null_mut(),
         }
     }
 }
