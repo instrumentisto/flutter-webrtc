@@ -143,6 +143,7 @@ pub(crate) mod webrtc {
         first: String,
         second: String,
     }
+
     // TODO: Remove once `cxx` crate allows using pointers to opaque types in
     //       vectors: https://github.com/dtolnay/cxx/issues/741
     /// Wrapper for an [`RtpEncodingParameters`] usable in Rust/C++ vectors.
@@ -1219,14 +1220,83 @@ pub(crate) mod webrtc {
 
     unsafe extern "C++" {
         pub type AudioDeviceModule;
+        pub type CustomAudioDeviceModule;
         pub type AudioLayer;
+        pub type AudioSourceManager;
+        pub type AudioSource;
+        pub type AudioSourceInfo;
 
-        /// Creates a new [`AudioDeviceModule`] for the given [`AudioLayer`].
-        pub fn create_audio_device_module(
+        /// Creates a new [`AudioSourceManager`]
+        /// for the given [`CustomAudioDeviceModule`].
+        pub fn create_source_manager(
+            adm: &CustomAudioDeviceModule,
+            worker_thread: Pin<&mut Thread>,
+        ) -> UniquePtr<AudioSourceManager>;
+
+        /// Enumerates possible system audio sources.
+        pub fn enumerate_system_audio_source(
+            manager: &AudioSourceManager,
+        ) -> UniquePtr<CxxVector<AudioSourceInfo>>;
+
+        /// Returns [`AudioSourceInfo`] id.
+        pub fn system_source_id(manager: &AudioSourceInfo) -> i64;
+
+        /// Returns [`AudioSourceInfo`] title.
+        pub fn system_source_title(
+            manager: &AudioSourceInfo,
+        ) -> UniquePtr<CxxString>;
+
+        /// Sets the volume of the system audio capture.
+        pub fn set_system_audio_source_volume(
+            manager: Pin<&mut AudioSourceManager>,
+            level: f32,
+        );
+
+        /// Returns the current volume of the system audio capture.
+        pub fn system_audio_source_volume(manager: &AudioSourceManager) -> f32;
+
+        /// Sets the system audio source.
+        pub fn set_system_audio_source(
+            manager: Pin<&mut AudioSourceManager>,
+            id: i64,
+        );
+
+        /// Creates a new proxied [`AudioDeviceModule`]
+        /// from the provided [`CustomAudioDeviceModule`].
+        pub fn custom_audio_device_module_proxy_upcast(
+            adm: UniquePtr<CustomAudioDeviceModule>,
+            worker_thread: Pin<&mut Thread>,
+        ) -> UniquePtr<AudioDeviceModule>;
+
+        /// Creates a new [`AudioSource`] from microphone.
+        pub fn create_source_microphone(
+            manager: Pin<&mut AudioSourceManager>,
+        ) -> UniquePtr<AudioSource>;
+
+        /// Creates a new [`AudioSource`] from microphone.
+        pub fn create_system_audio_source(
+            manager: Pin<&mut AudioSourceManager>,
+        ) -> UniquePtr<AudioSource>;
+
+        /// Adds [`AudioSource`] to [`AudioSourceManager`].
+        pub fn add_source(
+            manager: Pin<&mut AudioSourceManager>,
+            source: &AudioSource,
+        );
+
+        /// Removes [`AudioSource`] to [`AudioSourceManager`].
+        pub fn remove_source(
+            manager: Pin<&mut AudioSourceManager>,
+            source: &AudioSource,
+        );
+
+        /// Creates a new [`CustomAudioDeviceModule`]
+        /// for the given [`AudioLayer`].
+        pub fn create_custom_audio_device_module(
             worker_thread: Pin<&mut Thread>,
             audio_layer: AudioLayer,
             task_queue_factory: Pin<&mut TaskQueueFactory>,
-        ) -> UniquePtr<AudioDeviceModule>;
+        ) -> UniquePtr<CustomAudioDeviceModule>;
 
         /// Creates a new fake [`AudioDeviceModule`], that will not try to
         /// access real media devices, but will generate pulsed noise.
@@ -2140,6 +2210,11 @@ pub(crate) mod webrtc {
             height: usize,
             fps: usize,
         ) -> UniquePtr<VideoTrackSourceInterface>;
+
+        /// Creates a new mixed [`AudioSourceInterface`].
+        pub fn create_mixed_audio_source(
+            adm: Pin<&mut AudioSourceManager>,
+        ) -> UniquePtr<AudioSourceInterface>;
 
         /// Creates a new [`AudioSourceInterface`].
         pub fn create_audio_source(

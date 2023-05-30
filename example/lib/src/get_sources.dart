@@ -23,6 +23,7 @@ class _GetSourcesSampleState extends State<GetSourcesSample> {
   void _getSources() async {
     var mediaDeviceInfos = await enumerateDevices();
     var mediaDisplayInfos = await enumerateDisplays();
+    var systemAudioInfos = await enumerateSystemAudioSource();
     setState(() {
       var devicesInfo = '';
       for (var device in mediaDeviceInfos) {
@@ -32,6 +33,10 @@ class _GetSourcesSampleState extends State<GetSourcesSample> {
       for (var display in mediaDisplayInfos) {
         devicesInfo +=
             'Kind: ${MediaDeviceKind.videoinput}\nTitle: ${display.title.toString()}\nId: ${display.deviceId}\n\n';
+      }
+      for (var system in systemAudioInfos) {
+        devicesInfo +=
+            'Title: ${system.title.toString()}\nId: ${system.id}\n\n';
       }
       text = devicesInfo;
     });

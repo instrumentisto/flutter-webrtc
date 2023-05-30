@@ -68,6 +68,12 @@ class _LoopbackState extends State<Loopback> {
 
     try {
       _tracks = await getUserMedia(caps);
+
+      for (var element in _tracks!) {
+        element.onEnded(() {
+          print("ende");
+        });
+      }
       await _localRenderer.setSrcObject(
           _tracks!.firstWhere((track) => track.kind() == MediaKind.video));
 

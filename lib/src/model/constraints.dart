@@ -74,6 +74,7 @@ abstract class DeviceMediaConstraints {
 /// [DeviceMediaConstraints] for audio devices.
 class AudioConstraints implements DeviceMediaConstraints {
   String? deviceId;
+  int? systemId;
 
   /// Converts this model to the [Map] expected by Flutter.
   @override

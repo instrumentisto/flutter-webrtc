@@ -161,6 +161,14 @@ impl From<sys::TrackKind> for TrackKind {
     }
 }
 
+/// Information about system audio source.
+pub struct AudioSourceInfo {
+    /// Unique id of system audio source.
+    pub id: i64,
+    /// Title of system audio source.
+    pub title: String,
+}
+
 /// Fields of [`RtcStatsType::RtcInboundRtpStreamStats`] variant.
 pub enum RtcInboundRtpStreamMediaType {
     /// `audio` media type fields.
@@ -1636,6 +1644,10 @@ pub struct AudioConstraints {
     ///           changing device will affect all previously obtained audio
     ///           tracks.
     pub device_id: Option<String>,
+
+    /// Identifier of the system audio source generating the content of the
+    /// [`MediaStreamTrack`].
+    pub system_id: Option<i64>,
 }
 
 /// Representation of a single media track within a [`MediaStream`].
@@ -1863,6 +1875,11 @@ pub fn is_fake_media() -> bool {
 /// microphones, cameras, headsets, and so forth.
 pub fn enumerate_devices() -> anyhow::Result<Vec<MediaDeviceInfo>> {
     WEBRTC.lock().unwrap().enumerate_devices()
+}
+
+/// Enumerates possible system audio sources.
+pub fn enumerate_system_audio_source() -> Vec<AudioSourceInfo> {
+    WEBRTC.lock().unwrap().enumerate_system_audio_source()
 }
 
 /// Returns a list of all available displays that can be used for screen
@@ -2186,6 +2203,16 @@ pub fn clone_track(
     kind: MediaType,
 ) -> anyhow::Result<MediaStreamTrack> {
     WEBRTC.lock().unwrap().clone_track(track_id, kind)
+}
+
+/// Sets the volume of the system audio capture.
+pub fn set_system_audio_volume(level: f32) {
+    WEBRTC.lock().unwrap().set_system_audio_volume(level);
+}
+
+/// Returns the current volume of the system audio capture.
+pub fn system_audio_volume() -> f32 {
+    WEBRTC.lock().unwrap().system_audio_volume()
 }
 
 /// Registers an observer to the [`MediaStreamTrack`] events.

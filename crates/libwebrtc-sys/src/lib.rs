@@ -190,8 +190,34 @@ impl TaskQueueFactory {
     }
 }
 
+/// Representation of a custom audio source,
+/// used to mix and send an audio device module.
+pub struct AudioSource(UniquePtr<webrtc::AudioSource>);
+
 unsafe impl Send for webrtc::TaskQueueFactory {}
 unsafe impl Sync for webrtc::TaskQueueFactory {}
+
+/// Information about system audio source.
+pub struct AudioSourceInfo {
+    /// Unique id of system audio source.
+    id: i64,
+    /// Title of system audio source.
+    title: String,
+}
+
+impl AudioSourceInfo {
+    /// Returns a `id` of this [`AudioSourceInfo`].
+    #[must_use]
+    pub fn id(&self) -> i64 {
+        self.id
+    }
+
+    /// Returns a `title` of this [`AudioSourceInfo`].
+    #[must_use]
+    pub fn title(&self) -> String {
+        self.title.clone()
+    }
+}
 
 /// Available audio devices manager that is responsible for driving input
 /// (microphone) and output (speaker) audio in WebRTC.
@@ -199,7 +225,10 @@ unsafe impl Sync for webrtc::TaskQueueFactory {}
 /// Backed by WebRTC's [Audio Device Module].
 ///
 /// [Audio Device Module]: https://tinyurl.com/doc-adm
-pub struct AudioDeviceModule(UniquePtr<webrtc::AudioDeviceModule>);
+pub struct AudioDeviceModule(
+    UniquePtr<webrtc::AudioDeviceModule>,
+    UniquePtr<webrtc::AudioSourceManager>,
+);
 
 impl AudioDeviceModule {
     /// Creates a new [`AudioDeviceModule`] for the given [`AudioLayer`].
@@ -211,24 +240,68 @@ impl AudioDeviceModule {
         audio_layer: AudioLayer,
         task_queue_factory: &mut TaskQueueFactory,
     ) -> anyhow::Result<Self> {
-        let ptr = webrtc::create_audio_device_module(
+        let adm = webrtc::create_custom_audio_device_module(
             worker_thread.0.pin_mut(),
             audio_layer,
             task_queue_factory.0.pin_mut(),
         );
 
+        let manager =
+            webrtc::create_source_manager(&adm, worker_thread.0.pin_mut());
+
+        let ptr = webrtc::custom_audio_device_module_proxy_upcast(
+            adm,
+            worker_thread.0.pin_mut(),
+        );
+
         if ptr.is_null() {
             bail!("`null` pointer returned from `AudioDeviceModule::Create()`");
         }
-        Ok(Self(ptr))
+        Ok(Self(ptr, manager))
+    }
+
+    /// Creates a new [`AudioSourceInterface`], which provides sound recording
+    /// from native platform.
+    pub fn create_audio_source(
+        &mut self,
+    ) -> anyhow::Result<AudioSourceInterface> {
+        let ptr = webrtc::create_mixed_audio_source(self.1.pin_mut());
+
+        if ptr.is_null() {
+            bail!(
+                "`null` pointer returned from \
+                 `webrtc::PeerConnectionFactoryInterface::CreateAudioSource()`",
+            );
+        }
+        Ok(AudioSourceInterface(ptr))
     }
 
     /// Creates a new fake [`AudioDeviceModule`], that will not try to access
     /// real media devices, but will generate pulsed noise.
     pub fn create_fake(task_queue_factory: &mut TaskQueueFactory) -> Self {
-        Self(webrtc::create_fake_audio_device_module(
-            task_queue_factory.0.pin_mut(),
-        ))
+        Self(
+            webrtc::create_fake_audio_device_module(
+                task_queue_factory.0.pin_mut(),
+            ),
+            UniquePtr::null(),
+        )
+    }
+
+    /// Sets the system audio source.
+    pub fn set_system_audio_source(&mut self, id: i64) {
+        webrtc::set_system_audio_source(self.1.pin_mut(), id);
+    }
+
+    /// Enumerates possible system audio sources.
+    #[must_use]
+    pub fn enumerate_system_audio_source(&self) -> Vec<AudioSourceInfo> {
+        webrtc::enumerate_system_audio_source(&self.1)
+            .into_iter()
+            .map(|info| AudioSourceInfo {
+                id: webrtc::system_source_id(info),
+                title: webrtc::system_source_title(info).to_string(),
+            })
+            .collect()
     }
 
     /// Initializes the current [`AudioDeviceModule`].
@@ -238,6 +311,44 @@ impl AudioDeviceModule {
             bail!("`AudioDeviceModule::Init()` failed with `{result}` code");
         }
         Ok(())
+    }
+
+    /// Creates a new [`AudioSource`] from microphone.
+    pub fn create_source_microphone(&mut self) -> AudioSource {
+        // Fake media.
+        if self.1.is_null() {
+            return AudioSource(UniquePtr::null());
+        }
+        let result = webrtc::create_source_microphone(self.1.pin_mut());
+        AudioSource(result)
+    }
+
+    /// Creates a new [`AudioSource`] from microphone.
+    pub fn create_system_audio_source(&mut self) -> AudioSource {
+        // Fake media.
+        if self.1.is_null() {
+            return AudioSource(UniquePtr::null());
+        }
+        let result = webrtc::create_system_audio_source(self.1.pin_mut());
+        AudioSource(result)
+    }
+
+    /// Adds [`AudioSource`] to [`webrtc::AudioSourceManager`].
+    pub fn add_source(&mut self, source: &AudioSource) {
+        // Fake media.
+        if self.1.is_null() {
+            return;
+        }
+        webrtc::add_source(self.1.pin_mut(), &source.0);
+    }
+
+    /// Removes [`AudioSource`] from [`webrtc::AudioSourceManager`].
+    pub fn remove_source(&mut self, source: &AudioSource) {
+        // Fake media.
+        if self.1.is_null() {
+            return;
+        }
+        webrtc::remove_source(self.1.pin_mut(), &source.0);
     }
 
     /// Returns count of available audio playout devices.
@@ -471,10 +582,27 @@ impl AudioDeviceModule {
 
         Ok(volume)
     }
+
+    /// Sets the volume of the system audio capture.
+    pub fn set_system_audio_source_volume(&mut self, level: f32) {
+        webrtc::set_system_audio_source_volume(self.1.pin_mut(), level);
+    }
+
+    /// Returns the current volume of the system audio capture.
+    #[must_use]
+    pub fn system_audio_source_volume(&self) -> f32 {
+        webrtc::system_audio_source_volume(&self.1)
+    }
 }
 
 unsafe impl Send for webrtc::AudioDeviceModule {}
 unsafe impl Sync for webrtc::AudioDeviceModule {}
+
+unsafe impl Send for webrtc::AudioSourceManager {}
+unsafe impl Sync for webrtc::AudioSourceManager {}
+
+unsafe impl Send for webrtc::AudioSource {}
+unsafe impl Sync for webrtc::AudioSource {}
 
 /// Representation of The Audio Processing Module, providing a collection of
 /// voice processing components designed for real-time communications software.

@@ -50,6 +50,16 @@ fn wire_enumerate_devices_impl(port_: MessagePort) {
         move || move |task_callback| enumerate_devices(),
     )
 }
+fn wire_enumerate_system_audio_source_impl(port_: MessagePort) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap(
+        WrapInfo {
+            debug_name: "enumerate_system_audio_source",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || move |task_callback| Ok(enumerate_system_audio_source()),
+    )
+}
 fn wire_enumerate_displays_impl(port_: MessagePort) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap(
         WrapInfo {
@@ -608,6 +618,32 @@ fn wire_clone_track_impl(
         },
     )
 }
+fn wire_set_system_audio_volume_impl(
+    port_: MessagePort,
+    level: impl Wire2Api<f32> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap(
+        WrapInfo {
+            debug_name: "set_system_audio_volume",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_level = level.wire2api();
+            move |task_callback| Ok(set_system_audio_volume(api_level))
+        },
+    )
+}
+fn wire_system_audio_volume_impl(port_: MessagePort) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap(
+        WrapInfo {
+            debug_name: "system_audio_volume",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || move |task_callback| Ok(system_audio_volume()),
+    )
+}
 fn wire_register_track_observer_impl(
     port_: MessagePort,
     track_id: impl Wire2Api<String> + UnwindSafe,
@@ -723,6 +759,11 @@ impl Wire2Api<BundlePolicy> for i32 {
         }
     }
 }
+impl Wire2Api<f32> for f32 {
+    fn wire2api(self) -> f32 {
+        self
+    }
+}
 impl Wire2Api<i32> for i32 {
     fn wire2api(self) -> i32 {
         self
@@ -800,6 +841,13 @@ impl Wire2Api<u8> for u8 {
 }
 
 // Section: impl IntoDart
+
+impl support::IntoDart for AudioSourceInfo {
+    fn into_dart(self) -> support::DartAbi {
+        vec![self.id.into_dart(), self.title.into_dart()].into_dart()
+    }
+}
+impl support::IntoDartExceptPrimitive for AudioSourceInfo {}
 
 impl support::IntoDart for CandidateType {
     fn into_dart(self) -> support::DartAbi {
